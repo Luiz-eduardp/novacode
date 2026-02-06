@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Layout } from './components/Layout';
 import { Terminal } from './components/Terminal';
 import FileEditor from './components/FileEditor';
@@ -12,29 +12,36 @@ import { SSHManager } from './components/Sidebar/SSHManager';
 import { CommandManager } from './components/Sidebar/CommandManager';
 import { SidebarView, FileNode, Snippet, Plugin, ThemeConfig, SSHSession, TerminalSession, CustomCommand } from './types';
 import { INITIAL_FILES, INITIAL_SSH_SESSIONS, INITIAL_SNIPPETS, INITIAL_PLUGINS, THEMES, INITIAL_CUSTOM_COMMANDS } from './constants';
-import { formatCodeAI, simulateRemoteSSHCommand } from './services/geminiService';
+import { formatCodeAI } from './services/geminiService';
+import { executeTerminalCommand } from './services/terminalService';
+
+const useLocalStorage = <T,>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
+  const [state, setState] = useState<T>(() => {
+    try {
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : initialValue;
+    } catch {
+      return initialValue;
+    }
+  });
+
+  const setValue = useCallback((value: React.SetStateAction<T>) => {
+    setState(prev => {
+      const newValue = typeof value === 'function' ? (value as (prev: T) => T)(prev) : value;
+      try { localStorage.setItem(key, JSON.stringify(newValue)); } catch {}
+      return newValue;
+    });
+  }, [key]);
+
+  return [state, setValue];
+};
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<SidebarView>(SidebarView.Explorer);
-  const [theme, setTheme] = useState<ThemeConfig>(() => {
-    const saved = localStorage.getItem('nova_theme');
-    return saved ? JSON.parse(saved) : THEMES[0];
-  });
-
-  const [files, setFiles] = useState<FileNode[]>(() => {
-    const saved = localStorage.getItem('nova_files');
-    return saved ? JSON.parse(saved) : INITIAL_FILES;
-  });
-
-  const [snippets, setSnippets] = useState<Snippet[]>(() => {
-    const saved = localStorage.getItem('nova_snippets');
-    return saved ? JSON.parse(saved) : INITIAL_SNIPPETS;
-  });
-
-  const [customCommands, setCustomCommands] = useState<CustomCommand[]>(() => {
-    const saved = localStorage.getItem('nova_commands');
-    return saved ? JSON.parse(saved) : INITIAL_CUSTOM_COMMANDS;
-  });
+  const [theme, setTheme] = useLocalStorage<ThemeConfig>('nova_theme', THEMES[0]);
+  const [files, setFiles] = useLocalStorage<FileNode[]>('nova_files', INITIAL_FILES);
+  const [snippets, setSnippets] = useLocalStorage<Snippet[]>('nova_snippets', INITIAL_SNIPPETS);
+  const [customCommands, setCustomCommands] = useLocalStorage<CustomCommand[]>('nova_commands', INITIAL_CUSTOM_COMMANDS);
 
   const [terminals, setTerminals] = useState<TerminalSession[]>([
     { id: 't1', name: 'Terminal 1', lines: ['Bem-vindo ao NovaCode!', 'Digite "help" para ajuda.'], currentInput: '' }
@@ -45,15 +52,10 @@ const App: React.FC = () => {
   const [sshSessions, setSshSessions] = useState<SSHSession[]>(INITIAL_SSH_SESSIONS);
 
   const [activeFileId, setActiveFileId] = useState<string | null>('1-1');
-  const [openFiles, setOpenFiles] = useState<string[]>(['1-1', '2']);
+  const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [isFormatting, setIsFormatting] = useState(false);
 
-  useEffect(() => { localStorage.setItem('nova_files', JSON.stringify(files)); }, [files]);
-  useEffect(() => { localStorage.setItem('nova_snippets', JSON.stringify(snippets)); }, [snippets]);
-  useEffect(() => { localStorage.setItem('nova_commands', JSON.stringify(customCommands)); }, [customCommands]);
-  useEffect(() => { localStorage.setItem('nova_theme', JSON.stringify(theme)); }, [theme]);
-
-  const findFileById = (nodes: FileNode[], id: string): FileNode | undefined => {
+  const findFileById = useCallback((nodes: FileNode[], id: string): FileNode | undefined => {
     for (const node of nodes) {
       if (node.id === id) return node;
       if (node.children) {
@@ -62,12 +64,12 @@ const App: React.FC = () => {
       }
     }
     return undefined;
-  };
+  }, []);
 
   const activeFile = useMemo(() => activeFileId ? findFileById(files, activeFileId) : null, [files, activeFileId]);
   const activeTerminal = useMemo(() => terminals.find(t => t.id === activeTerminalId) || terminals[0], [terminals, activeTerminalId]);
 
-  const handleCreateFile = () => {
+  const handleCreateFile = useCallback(() => {
     const name = prompt("Digite o nome do arquivo:");
     if (!name) return;
     const newFile: FileNode = {
@@ -80,25 +82,25 @@ const App: React.FC = () => {
     setFiles(prev => [...prev, newFile]);
     setActiveFileId(newFile.id);
     setOpenFiles(prev => [...prev, newFile.id]);
-  };
+  }, [setFiles]);
 
-  const handleDeleteFile = (id: string, e: React.MouseEvent) => {
+  const handleDeleteFile = useCallback((id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm("Tem certeza que deseja excluir?")) return;
     setFiles(prev => prev.filter(f => f.id !== id));
     setOpenFiles(prev => prev.filter(fid => fid !== id));
     if (activeFileId === id) setActiveFileId(null);
-  };
+  }, [activeFileId, setFiles]);
 
-  const handleFormatCode = async () => {
+  const handleFormatCode = useCallback(async () => {
     if (!activeFile || isFormatting) return;
     setIsFormatting(true);
     const formatted = await formatCodeAI(activeFile.content || '', activeFile.language || 'javascript');
     updateFileContent(activeFile.id, formatted);
     setIsFormatting(false);
-  };
+  }, [activeFile, isFormatting]);
 
-  const updateFileContent = (id: string, content: string) => {
+  const updateFileContent = useCallback((id: string, content: string) => {
     setFiles(prev => {
       const update = (nodes: FileNode[]): FileNode[] => nodes.map(node => {
         if (node.id === id) return { ...node, content };
@@ -107,9 +109,9 @@ const App: React.FC = () => {
       });
       return update(prev);
     });
-  };
+  }, [setFiles]);
 
-  const handleCreateTerminal = () => {
+  const handleCreateTerminal = useCallback(() => {
     const id = Date.now().toString();
     const newTerminal: TerminalSession = {
       id,
@@ -117,54 +119,84 @@ const App: React.FC = () => {
       lines: [`Sessão iniciada em ${new Date().toLocaleTimeString()}`],
       currentInput: ''
     };
-    setTerminals([...terminals, newTerminal]);
+    setTerminals(prev => [...prev, newTerminal]);
     setActiveTerminalId(id);
-  };
+  }, [terminals.length]);
 
-  const handleCloseTerminal = (id: string, e: React.MouseEvent) => {
+  const handleCloseTerminal = useCallback((id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (terminals.length <= 1) return;
-    const newTerminals = terminals.filter(t => t.id !== id);
-    setTerminals(newTerminals);
-    if (activeTerminalId === id) setActiveTerminalId(newTerminals[0].id);
+    setTerminals(prev => {
+      if (prev.length <= 1) return prev;
+      const newTerminals = prev.filter(t => t.id !== id);
+      if (activeTerminalId === id) setActiveTerminalId(newTerminals[0].id);
+      return newTerminals;
+    });
     if (id.startsWith('ssh-')) {
       try {
         window.__electron__?.stop(id)
       } catch (e) { console.warn(e) }
     }
-  };
+  }, [activeTerminalId]);
 
-  const handleExecuteTerminalCommand = async (command: string) => {
+  const handleExecuteTerminalCommand = useCallback(async (command: string) => {
     if (!command.trim()) return;
+    
+    try {
+      const result = await executeTerminalCommand(command);
+      
+      setTerminals(prev => prev.map(t => {
+        if (t.id === activeTerminalId) {
+          if (result.isCleared) {
+            return {
+              ...t,
+              lines: [],
+              currentInput: ''
+            };
+          }
+          
+          const newLines = [...t.lines, `nova@usuario:~$ ${command}`];
+          
+          if (result.output && result.output.trim()) {
+            const outputLines = result.output.trim().split('\n');
+            newLines.push(...outputLines);
+          }
+          
+          return {
+            ...t,
+            lines: newLines,
+            currentInput: ''
+          };
+        }
+        return t;
+      }));
+    } catch (error) {
+      setTerminals(prev => prev.map(t => {
+        if (t.id === activeTerminalId) {
+          return {
+            ...t,
+            lines: [...t.lines, `nova@usuario:~$ ${command}`, `Erro: ${error instanceof Error ? error.message : String(error)}`],
+            currentInput: ''
+          };
+        }
+        return t;
+      }));
+    }
+  }, [activeTerminalId]);
 
-    const output = await simulateRemoteSSHCommand(command, "Terminal Local NovaCode");
-
-    setTerminals(prev => prev.map(t => {
-      if (t.id === activeTerminalId) {
-        return {
-          ...t,
-          lines: [...t.lines, `nova@usuario:~$ ${command}`, output],
-          currentInput: ''
-        };
-      }
-      return t;
-    }));
-  };
-
-  const updateTerminalSession = (updates: Partial<TerminalSession>) => {
+  const updateTerminalSession = useCallback((updates: Partial<TerminalSession>) => {
     setTerminals(prev => prev.map(t => t.id === activeTerminalId ? { ...t, ...updates } : t));
-  };
+  }, [activeTerminalId]);
 
-  const handleInsertSnippet = (code: string) => {
+  const handleInsertSnippet = useCallback((code: string) => {
     if (!activeFileId) return;
     const processedCode = code.replace(/\$\{1:(.*?)\}/g, (match, p1) => {
       const val = prompt(`Valor para o campo [${p1}]:`, p1);
       return val || p1;
     });
     updateFileContent(activeFileId, (activeFile?.content || '') + '\n' + processedCode);
-  };
+  }, [activeFileId, activeFile, updateFileContent]);
 
-  const handleConnectSSH = async (id: string) => {
+  const handleConnectSSH = useCallback(async (id: string) => {
     setSshSessions(prev => prev.map(s => s.id === id ? { ...s, status: 'connecting', error: undefined } : s));
     const session = sshSessions.find(s => s.id === id);
     if (!session) return;
@@ -186,7 +218,6 @@ const App: React.FC = () => {
         })
         setActiveTerminalId(termId)
         try {
-          // @ts-ignore
           const startRes = await window.__electron_ssh__?.start(termId, conn)
           if (!startRes || !startRes.ok) {
             setSshSessions(prev => prev.map(s => s.id === id ? { ...s, status: 'error', error: startRes?.error || 'Falha ao iniciar shell SSH' } : s));
@@ -200,13 +231,13 @@ const App: React.FC = () => {
     } catch (err) {
       setSshSessions(prev => prev.map(s => s.id === id ? { ...s, status: 'error', error: err?.message || String(err) } : s));
     }
-  };
+  }, [sshSessions]);
 
-  const handleUpdateSSH = (session: SSHSession) => {
+  const handleUpdateSSH = useCallback((session: SSHSession) => {
     setSshSessions(prev => prev.map(s => s.id === session.id ? { ...s, ...session } : s));
-  };
+  }, []);
 
-  const renderFileTree = (nodes: FileNode[], depth = 0) => {
+  const renderFileTree = useCallback((nodes: FileNode[], depth = 0) => {
     return nodes.map((node) => (
       <div key={node.id}>
         <div
@@ -230,7 +261,7 @@ const App: React.FC = () => {
         {node.children && node.isOpen && renderFileTree(node.children, depth + 1)}
       </div>
     ));
-  };
+  }, [activeFileId, openFiles, theme.primary, handleDeleteFile]);
 
   const sidebarContent = useMemo(() => {
     switch (activeView) {
@@ -249,8 +280,8 @@ const App: React.FC = () => {
           <CommandManager
             commands={customCommands}
             onExecute={handleExecuteTerminalCommand}
-            onAdd={(cmd) => setCustomCommands([...customCommands, cmd])}
-            onDelete={(id) => setCustomCommands(customCommands.filter(c => c.id !== id))}
+            onAdd={(cmd) => setCustomCommands(prev => [...prev, cmd])}
+            onDelete={(id) => setCustomCommands(prev => prev.filter(c => c.id !== id))}
           />
         );
       case SidebarView.SSH:
@@ -279,9 +310,9 @@ const App: React.FC = () => {
           />
         );
       case SidebarView.Snippets:
-        return <SnippetManager snippets={snippets} onInsert={handleInsertSnippet} onAdd={(s) => setSnippets([...snippets, s])} />;
+        return <SnippetManager snippets={snippets} onInsert={handleInsertSnippet} onAdd={(s) => setSnippets(prev => [...prev, s])} />;
       case SidebarView.Plugins:
-        return <PluginManager plugins={plugins} onToggle={(id) => setPlugins(plugins.map(p => p.id === id ? { ...p, enabled: !p.enabled } : p))} />;
+        return <PluginManager plugins={plugins} onToggle={(id) => setPlugins(prev => prev.map(p => p.id === id ? { ...p, enabled: !p.enabled } : p))} />;
       case SidebarView.Settings:
         return <Settings currentTheme={theme.name} onThemeChange={setTheme} />;
       case SidebarView.AI:
@@ -289,7 +320,7 @@ const App: React.FC = () => {
       default:
         return <div className="p-6 text-slate-500 italic text-xs">Selecione uma ferramenta.</div>;
     }
-  }, [activeView, files, activeFile, snippets, plugins, theme, sshSessions, customCommands, activeTerminalId]);
+  }, [activeView, files, activeFile, snippets, plugins, theme, sshSessions, customCommands, handleCreateFile, handleExecuteTerminalCommand, handleConnectSSH, handleInsertSnippet, setCustomCommands, setSnippets, setPlugins, setTheme, setSshSessions, setFiles, renderFileTree]);
 
   return (
     <Layout

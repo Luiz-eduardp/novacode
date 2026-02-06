@@ -7,7 +7,7 @@ interface TerminalProps {
   session: TerminalSession;
   virtualFiles: FileNode[];
   onUpdateSession: (updates: Partial<TerminalSession>) => void;
-  onExecuteCommand: (cmd: string) => void;
+  onExecuteCommand: (cmd: string) => Promise<void>;
 }
 
 export const Terminal: React.FC<TerminalProps> = ({ session, virtualFiles, onUpdateSession, onExecuteCommand }) => {
@@ -38,6 +38,11 @@ export const Terminal: React.FC<TerminalProps> = ({ session, virtualFiles, onUpd
 
   const handleKeyDown = async (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
+      const command = session.currentInput.trim();
+      if (!command) return;
+      
+      e.preventDefault();
+      
       if (isSSH) {
         try {
           // @ts-ignore
@@ -45,7 +50,11 @@ export const Terminal: React.FC<TerminalProps> = ({ session, virtualFiles, onUpd
           onUpdateSession({ lines: [...session.lines, `nova@${session.name}:~$ ${session.currentInput}`], currentInput: '' })
         } catch (e) { console.warn('ssh send error', e) }
       } else {
-        onExecuteCommand(session.currentInput);
+        onUpdateSession({ currentInput: '' });        try {
+          await onExecuteCommand(command);
+        } catch (err) {
+          console.error('Command execution error:', err);
+        }
       }
     } else if (e.key === 'Tab') {
       e.preventDefault();
@@ -60,13 +69,25 @@ export const Terminal: React.FC<TerminalProps> = ({ session, virtualFiles, onUpd
 
   return (
     <div className="flex flex-col h-full bg-transparent text-slate-300 font-mono text-sm overflow-hidden">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 fira-code whitespace-pre-wrap leading-relaxed">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 fira-code leading-relaxed">
         {session.lines.map((line, i) => (
-          <div key={i} className={`mb-1 ${line.startsWith('nova@') ? 'text-emerald-500 font-bold' : ''}`}>
+          <div 
+            key={i} 
+            className={`${
+              line.startsWith('nova@') 
+                ? 'text-emerald-500 font-bold' 
+                : line.startsWith('Erro:')
+                ? 'text-rose-400'
+                : line.startsWith('$')
+                ? 'text-slate-400'
+                : 'text-slate-300'
+            }`}
+            style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+          >
             {line}
           </div>
         ))}
-        <div className="flex items-center mt-1">
+        <div className="flex items-center mt-2">
           <span className="text-emerald-500 font-bold mr-2">$</span>
           <input 
             type="text" 

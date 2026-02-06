@@ -27,3 +27,8 @@ contextBridge.exposeInMainWorld('__electron_ssh__', {
     onData: (cb) => ipcRenderer.on('ssh-data', (e, payload) => cb(payload)),
     onExit: (cb) => ipcRenderer.on('ssh-exit', (e, payload) => cb(payload))
 })
+
+contextBridge.exposeInMainWorld('__electron_terminal__', {
+    execute: (command, cwd) => ipcRenderer.invoke('terminal-execute', { command, cwd }),
+    executeStream: (command, cwd) => ipcRenderer.invoke('terminal-execute-stream', { command, cwd })
+})

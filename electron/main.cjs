@@ -216,3 +216,83 @@ ipcMain.handle('ssh-stop', async (event, { terminalId }) => {
     }
     return { ok: true }
 })
+const { execSync, spawn } = require('child_process')
+const os = require('os')
+
+const INTERACTIVE_COMMANDS = ['nano', 'vim', 'vi', 'less', 'more', 'top', 'htop', 'man', 'node', 'python', 'irb']
+
+ipcMain.handle('terminal-execute', async (event, { command, cwd }) => {
+    return new Promise((resolve) => {
+        const workDir = cwd === '~' ? os.homedir() : (cwd || process.cwd())
+        const commandName = command.trim().split(/\s+/)[0]
+        
+        try {
+            if (command.trim() === 'clear' || command.trim() === 'cls') {
+                resolve({ success: true, output: '', isCleared: true });
+                return;
+            }
+            
+            if (INTERACTIVE_COMMANDS.some(cmd => commandName === cmd || commandName.endsWith('/' + cmd))) {
+                resolve({ 
+                    success: false, 
+                    output: `Comandos interativos como '${commandName}' não são suportados no terminal web. Use a aplicação diretamente no seu sistema.`,
+                    isCleared: false 
+                });
+                return;
+            }
+            
+            const output = execSync(command, { 
+                cwd: workDir,
+                encoding: 'utf-8',
+                maxBuffer: 50 * 1024 * 1024,
+                shell: true,
+                stdio: ['pipe', 'pipe', 'pipe']
+            }).toString();
+            resolve({ success: true, output, isCleared: false });
+        } catch (error) {
+            const errorOutput = error.stdout ? error.stdout.toString() : (error.message || String(error));
+            resolve({ success: true, output: errorOutput, isCleared: false });
+        }
+    });
+});
+
+ipcMain.handle('terminal-execute-stream', async (event, { command, cwd }) => {
+    return new Promise((resolve) => {
+        const workDir = cwd === '~' ? os.homedir() : (cwd || process.cwd())
+        const commandName = command.trim().split(/\s+/)[0]
+        
+        if (command.trim() === 'clear' || command.trim() === 'cls') {
+            resolve({ success: true, output: '', isCleared: true });
+            return;
+        }
+        
+        if (INTERACTIVE_COMMANDS.some(cmd => commandName === cmd || commandName.endsWith('/' + cmd))) {
+            resolve({ 
+                success: false, 
+                output: `Comandos interativos como '${commandName}' não são suportados no terminal web. Use a aplicação diretamente no seu sistema.`,
+                isCleared: false 
+            });
+            return;
+        }
+        
+        const proc = spawn(process.platform === 'win32' ? 'cmd.exe' : '/bin/bash', 
+            process.platform === 'win32' ? ['/c', command] : ['-c', command],
+            { cwd: workDir, stdio: ['pipe', 'pipe', 'pipe'] }
+        );
+        
+        let stdout = '';
+        let stderr = '';
+        
+        proc.stdout.on('data', (data) => { stdout += data.toString(); });
+        proc.stderr.on('data', (data) => { stderr += data.toString(); });
+        
+        proc.on('close', (code) => {
+            const output = stdout || stderr || '';
+            resolve({ success: true, output, isCleared: false });
+        });
+        
+        proc.on('error', (error) => {
+            resolve({ success: false, output: error.message, isCleared: false });
+        });
+    });
+});

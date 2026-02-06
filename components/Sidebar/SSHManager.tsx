@@ -250,7 +250,7 @@ export const SSHManager: React.FC<SSHManagerProps> = ({ sessions, onConnect, onA
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="p-4 border-b border-white/5 bg-slate-900/40">
+      <div className="p-4 border-b border-white/5 bg-slate-900/40 flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Acesso Remoto (SSH)</h2>
           <button
@@ -262,7 +262,7 @@ export const SSHManager: React.FC<SSHManagerProps> = ({ sessions, onConnect, onA
           </button>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-48 overflow-y-auto">
           {sessions.map(session => (
             <div
               key={session.id}
@@ -300,10 +300,10 @@ export const SSHManager: React.FC<SSHManagerProps> = ({ sessions, onConnect, onA
         )}
       </div>
 
-      <div className="flex-1 overflow-hidden flex flex-col">
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
         {activeSession?.status === 'connected' ? (
-          <div className="flex-1 flex flex-col animate-in fade-in duration-300">
-            <div className="px-4 py-2 bg-slate-900/60 border-b border-white/5 flex items-center justify-between">
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="px-4 py-2 bg-slate-900/60 border-b border-white/5 flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-1.5 overflow-hidden">
                 <svg className="w-3 h-3 text-sky-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /></svg>
                 <div className="flex items-center text-[10px] font-mono text-slate-400 truncate">
@@ -328,8 +328,8 @@ export const SSHManager: React.FC<SSHManagerProps> = ({ sessions, onConnect, onA
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-1 py-1">
-              <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-1 text-[10px] font-bold text-slate-600 uppercase tracking-tighter">
+            <div className="flex-1 overflow-y-auto min-h-0 ssh-files-scroll">
+              <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-1 text-[10px] font-bold text-slate-600 uppercase tracking-tighter sticky top-0 bg-slate-900/60 z-10">
                 <span>Nome</span>
                 <span>Tam.</span>
                 <span className="text-right">Perms</span>
@@ -363,14 +363,6 @@ export const SSHManager: React.FC<SSHManagerProps> = ({ sessions, onConnect, onA
         )}
       </div>
 
-      <div className="p-4 bg-slate-900/20 border-t border-white/5">
-        <button
-          className="w-full flex items-center justify-center gap-2 py-2 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition-all shadow-lg active:scale-95"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
-          Gerenciar Chaves SSH
-        </button>
-      </div>
     </div>
   );
 };
