@@ -1,0 +1,50 @@
+{
+  "name": "novacode",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@8.10.0",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "_electron:wait": "wait-on http://localhost:3000 && electron ./electron/main.cjs",
+    "electron:dev": "concurrently -k \"pnpm dev\" \"pnpm run _electron:wait\"",
+    "build:electron": "vite build && electron-builder"
+  },
+  "dependencies": {
+    "@google/genai": "^1.40.0",
+    "keytar": "^7.9.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "ssh2-sftp-client": "^9.1.0",
+    "ssh2": "^1.13.0",
+    "@monaco-editor/react": "^4.4.6",
+    "monaco-editor": "^0.55.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.2.13",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^8.2.0",
+    "electron": "^26.2.0",
+    "electron-builder": "^24.6.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0",
+    "wait-on": "^7.0.1"
+  },
+  "build": {
+    "appId": "com.novacode.app",
+    "files": [
+      "dist/**",
+      "electron/**",
+      "node_modules/**",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "assets"
+    }
+  }
+}
