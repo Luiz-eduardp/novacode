@@ -225,23 +225,23 @@ ipcMain.handle('terminal-execute', async (event, { command, cwd }) => {
     return new Promise((resolve) => {
         const workDir = cwd === '~' ? os.homedir() : (cwd || process.cwd())
         const commandName = command.trim().split(/\s+/)[0]
-        
+
         try {
             if (command.trim() === 'clear' || command.trim() === 'cls') {
                 resolve({ success: true, output: '', isCleared: true });
                 return;
             }
-            
+
             if (INTERACTIVE_COMMANDS.some(cmd => commandName === cmd || commandName.endsWith('/' + cmd))) {
-                resolve({ 
-                    success: false, 
+                resolve({
+                    success: false,
                     output: `Comandos interativos como '${commandName}' não são suportados no terminal web. Use a aplicação diretamente no seu sistema.`,
-                    isCleared: false 
+                    isCleared: false
                 });
                 return;
             }
-            
-            const output = execSync(command, { 
+
+            const output = execSync(command, {
                 cwd: workDir,
                 encoding: 'utf-8',
                 maxBuffer: 50 * 1024 * 1024,
@@ -260,39 +260,119 @@ ipcMain.handle('terminal-execute-stream', async (event, { command, cwd }) => {
     return new Promise((resolve) => {
         const workDir = cwd === '~' ? os.homedir() : (cwd || process.cwd())
         const commandName = command.trim().split(/\s+/)[0]
-        
+
         if (command.trim() === 'clear' || command.trim() === 'cls') {
             resolve({ success: true, output: '', isCleared: true });
             return;
         }
-        
+
         if (INTERACTIVE_COMMANDS.some(cmd => commandName === cmd || commandName.endsWith('/' + cmd))) {
-            resolve({ 
-                success: false, 
+            resolve({
+                success: false,
                 output: `Comandos interativos como '${commandName}' não são suportados no terminal web. Use a aplicação diretamente no seu sistema.`,
-                isCleared: false 
+                isCleared: false
             });
             return;
         }
-        
-        const proc = spawn(process.platform === 'win32' ? 'cmd.exe' : '/bin/bash', 
+
+        const proc = spawn(process.platform === 'win32' ? 'cmd.exe' : '/bin/bash',
             process.platform === 'win32' ? ['/c', command] : ['-c', command],
             { cwd: workDir, stdio: ['pipe', 'pipe', 'pipe'] }
         );
-        
+
         let stdout = '';
         let stderr = '';
-        
+
         proc.stdout.on('data', (data) => { stdout += data.toString(); });
         proc.stderr.on('data', (data) => { stderr += data.toString(); });
-        
+
         proc.on('close', (code) => {
             const output = stdout || stderr || '';
             resolve({ success: true, output, isCleared: false });
         });
-        
+
         proc.on('error', (error) => {
             resolve({ success: false, output: error.message, isCleared: false });
         });
     });
+});
+
+ipcMain.handle('fs-list', async (event, path) => {
+    try {
+        const files = await fs.readdir(path, { withFileTypes: true });
+        return {
+            ok: true,
+            files: files.map(file => ({
+                name: file.name,
+                isDirectory: file.isDirectory(),
+                path: require('path').join(path, file.name)
+            }))
+        };
+    } catch (err) {
+        return { ok: false, error: err.message };
+    }
+});
+
+ipcMain.handle('fs-read', async (event, path) => {
+    try {
+        const content = await fs.readFile(path, 'utf8');
+        return { ok: true, content };
+    } catch (err) {
+        return { ok: false, error: err.message };
+    }
+});
+
+ipcMain.handle('fs-write', async (event, { path: filePath, content }) => {
+    try {
+        await fs.writeFile(filePath, content, 'utf8');
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, error: err.message };
+    }
+});
+
+ipcMain.handle('fs-create-file', async (event, { path: filePath, content = '' }) => {
+    try {
+        const dir = require('path').dirname(filePath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        await fs.writeFile(filePath, content, 'utf8');
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, error: err.message };
+    }
+});
+
+ipcMain.handle('fs-create-folder', async (event, { path: folderPath }) => {
+    try {
+        fs.mkdirSync(folderPath, { recursive: true });
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, error: err.message };
+    }
+});
+
+ipcMain.handle('fs-delete', async (event, { path: targetPath }) => {
+    try {
+        const stats = fs.statSync(targetPath);
+        if (stats.isDirectory()) {
+            fs.rmSync(targetPath, { recursive: true, force: true });
+        } else {
+            fs.unlinkSync(targetPath);
+        }
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, error: err.message };
+    }
+});
+
+ipcMain.handle('fs-get-home-dir', async () => {
+    return { ok: true, path: require('os').homedir() };
+});
+
+ipcMain.handle('fs-get-docs-dir', async () => {
+    const homeDir = require('os').homedir();
+    const docsDir = require('path').join(homeDir, 'Documents');
+    return { ok: true, path: docsDir };
 });

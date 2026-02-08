@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Terminal } from './components/Terminal';
 import FileEditor from './components/FileEditor';
@@ -10,6 +10,9 @@ import { PluginManager } from './components/Sidebar/PluginManager';
 import { Settings } from './components/Sidebar/Settings';
 import { SSHManager } from './components/Sidebar/SSHManager';
 import { CommandManager } from './components/Sidebar/CommandManager';
+import { FileEditorToolbar } from './components/App/FileEditorToolbar';
+import { ExplorerPanel } from './components/App/ExplorerPanel';
+import { useChronos } from './hooks/useChronos';
 import { SidebarView, FileNode, Snippet, Plugin, ThemeConfig, SSHSession, TerminalSession, CustomCommand } from './types';
 import { INITIAL_FILES, INITIAL_SSH_SESSIONS, INITIAL_SNIPPETS, INITIAL_PLUGINS, THEMES, INITIAL_CUSTOM_COMMANDS } from './constants';
 import { formatCodeAI } from './services/geminiService';
@@ -28,7 +31,7 @@ const useLocalStorage = <T,>(key: string, initialValue: T): [T, React.Dispatch<R
   const setValue = useCallback((value: React.SetStateAction<T>) => {
     setState(prev => {
       const newValue = typeof value === 'function' ? (value as (prev: T) => T)(prev) : value;
-      try { localStorage.setItem(key, JSON.stringify(newValue)); } catch {}
+      try { localStorage.setItem(key, JSON.stringify(newValue)); } catch { }
       return newValue;
     });
   }, [key]);
@@ -54,6 +57,9 @@ const App: React.FC = () => {
   const [activeFileId, setActiveFileId] = useState<string | null>('1-1');
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [isFormatting, setIsFormatting] = useState(false);
+  const [unsavedFiles, setUnsavedFiles] = useState<Set<string>>(new Set());
+
+  const chronos = useChronos(activeFileId || '');
 
   const findFileById = useCallback((nodes: FileNode[], id: string): FileNode | undefined => {
     for (const node of nodes) {
@@ -84,6 +90,18 @@ const App: React.FC = () => {
     setOpenFiles(prev => [...prev, newFile.id]);
   }, [setFiles]);
 
+  const handleCreateFolder = useCallback(() => {
+    const name = prompt("Digite o nome da pasta:");
+    if (!name) return;
+    const newFolder: FileNode = {
+      id: Date.now().toString(),
+      name,
+      type: 'folder',
+      children: []
+    };
+    setFiles(prev => [...prev, newFolder]);
+  }, [setFiles]);
+
   const handleDeleteFile = useCallback((id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm("Tem certeza que deseja excluir?")) return;
@@ -109,7 +127,60 @@ const App: React.FC = () => {
       });
       return update(prev);
     });
+
+    setUnsavedFiles(prev => new Set([...prev, id]));
   }, [setFiles]);
+
+  const handleSaveFile = useCallback((id: string, content: string) => {
+    setUnsavedFiles(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(id);
+      return newSet;
+    });
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    if (!activeFileId) return;
+    const content = chronos.goToPrevious(activeFileId);
+    if (content !== null) {
+      updateFileContent(activeFileId, content);
+    }
+  }, [activeFileId, chronos, updateFileContent]);
+
+  const handleRedo = useCallback(() => {
+    if (!activeFileId) return;
+    const content = chronos.goToNext(activeFileId);
+    if (content !== null) {
+      updateFileContent(activeFileId, content);
+    }
+  }, [activeFileId, chronos, updateFileContent]);
+
+  const handleOpenSystemFile = useCallback((filePath: string, content: string) => {
+    const fileName = filePath.split(/[/\\]/).pop() || 'untitled';
+    const newFileId = Date.now().toString();
+    const newFile: FileNode = {
+      id: newFileId,
+      name: fileName,
+      type: 'file',
+      language: fileName.split('.').pop() || 'text',
+      content
+    };
+
+    setFiles(prev => [...prev, newFile]);
+    setActiveFileId(newFileId);
+    setOpenFiles(prev => [...prev, newFileId]);
+  }, []);
+
+  useEffect(() => {
+    const handleOpenFile = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { path, content } = customEvent.detail;
+      handleOpenSystemFile(path, content);
+    };
+
+    window.addEventListener('openSystemFile', handleOpenFile);
+    return () => window.removeEventListener('openSystemFile', handleOpenFile);
+  }, [handleOpenSystemFile]);
 
   const handleCreateTerminal = useCallback(() => {
     const id = Date.now().toString();
@@ -140,10 +211,10 @@ const App: React.FC = () => {
 
   const handleExecuteTerminalCommand = useCallback(async (command: string) => {
     if (!command.trim()) return;
-    
+
     try {
       const result = await executeTerminalCommand(command);
-      
+
       setTerminals(prev => prev.map(t => {
         if (t.id === activeTerminalId) {
           if (result.isCleared) {
@@ -153,14 +224,14 @@ const App: React.FC = () => {
               currentInput: ''
             };
           }
-          
+
           const newLines = [...t.lines, `nova@usuario:~$ ${command}`];
-          
+
           if (result.output && result.output.trim()) {
             const outputLines = result.output.trim().split('\n');
             newLines.push(...outputLines);
           }
-          
+
           return {
             ...t,
             lines: newLines,
@@ -267,13 +338,13 @@ const App: React.FC = () => {
     switch (activeView) {
       case SidebarView.Explorer:
         return (
-          <div className="py-4">
-            <div className="flex items-center justify-between px-5 mb-4">
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Explorador</span>
-              <button onClick={handleCreateFile} className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center hover:bg-sky-500/20 hover:text-sky-400 transition-all text-slate-400">+</button>
-            </div>
-            {renderFileTree(files)}
-          </div>
+          <ExplorerPanel
+            files={files}
+            primaryColor={theme.primary}
+            onCreateFile={handleCreateFile}
+            onCreateFolder={handleCreateFolder}
+            renderFileTree={renderFileTree}
+          />
         );
       case SidebarView.Commands:
         return (
@@ -398,7 +469,14 @@ const App: React.FC = () => {
 
       <div className="flex-1 flex flex-col relative transition-colors duration-500">
         {activeFile ? (
-          <FileEditor file={activeFile} updateFileContent={updateFileContent} theme={theme} />
+          <FileEditor
+            file={activeFile}
+            updateFileContent={updateFileContent}
+            theme={theme}
+            onSaveFile={handleSaveFile}
+            onCreateFile={handleCreateFile}
+            onCreateFolder={handleCreateFolder}
+          />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
             <div className="w-16 h-16 md:w-20 md:h-20 rounded-3xl bg-white/5 flex items-center justify-center mb-6 animate-float">
@@ -409,33 +487,22 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {activeFile && (
-          <div className="absolute top-4 right-4 md:top-6 md:right-6 flex items-center gap-3 animate-in fade-in slide-in-from-right-4">
-            <div
-              className="px-3 md:px-4 py-1.5 md:py-2 rounded-2xl flex items-center gap-2 md:gap-4 shadow-xl border border-white/5 transition-colors duration-500 backdrop-blur-xl"
-              style={{ backgroundColor: `${theme.sidebar}E6` }}
-            >
-              <button
-                onClick={handleFormatCode}
-                disabled={isFormatting}
-                title="Formatar com IA"
-                className={`p-1.5 md:p-2 rounded-xl hover:bg-white/5 transition-all ${isFormatting ? 'animate-spin' : ''}`}
-                style={{ color: isFormatting ? theme.primary : '#94a3b8' }}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" /></svg>
-              </button>
-              <div className="w-px h-4 bg-white/10"></div>
-              <button
-                onClick={() => setActiveView(SidebarView.AI)}
-                title="Análise de Qualidade"
-                className="p-1.5 md:p-2 rounded-xl hover:bg-white/5 transition-all text-slate-400 hover:text-white"
-                style={{ color: activeView === SidebarView.AI ? theme.primary : undefined }}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04" /></svg>
-              </button>
-            </div>
-          </div>
-        )}
+        <FileEditorToolbar
+          activeFile={activeFile}
+          isFormatting={isFormatting}
+          theme={theme}
+          activeView={activeView}
+          onFormatCode={handleFormatCode}
+          onOpenAI={() => setActiveView(SidebarView.AI)}
+          onCreateFile={handleCreateFile}
+          onCreateFolder={handleCreateFolder}
+          onSaveFile={() => activeFile && handleSaveFile(activeFile.id, activeFile.content || '')}
+          hasUnsavedChanges={activeFile ? unsavedFiles.has(activeFile.id) : false}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          canUndo={activeFileId ? chronos.canUndo(activeFileId) : false}
+          canRedo={activeFileId ? chronos.canRedo(activeFileId) : false}
+        />
       </div>
     </Layout>
   );

@@ -89,3 +89,17 @@ export interface ThemeConfig {
   sidebar: string;
   accent: string;
 }
+
+export interface ChronosSnapshot {
+  id: string;
+  timestamp: number;
+  content: string;
+  description: string;
+  fileId: string;
+}
+
+export interface ChronosHistory {
+  fileId: string;
+  snapshots: ChronosSnapshot[];
+  currentIndex: number;
+}

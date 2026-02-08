@@ -13,10 +13,19 @@ contextBridge.exposeInMainWorld('__electron__', {
         list: (connection, remotePath) => ipcRenderer.invoke('sftp-list', { connection, path: remotePath })
         ,
         get: (connection, remotePath) => ipcRenderer.invoke('sftp-get', { connection, path: remotePath })
-    }
-    ,
+    },
     file: {
         read: (filePath) => ipcRenderer.invoke('read-file', { path: filePath })
+    },
+    fs: {
+        list: (dirPath) => ipcRenderer.invoke('fs-list', { path: dirPath }),
+        read: (filePath) => ipcRenderer.invoke('fs-read', { path: filePath }),
+        write: (filePath, content) => ipcRenderer.invoke('fs-write', { path: filePath, content }),
+        createFile: (filePath) => ipcRenderer.invoke('fs-create-file', { path: filePath }),
+        createFolder: (folderPath) => ipcRenderer.invoke('fs-create-folder', { path: folderPath }),
+        delete: (path) => ipcRenderer.invoke('fs-delete', { path }),
+        getHomeDir: () => ipcRenderer.invoke('fs-get-home-dir'),
+        getDocsDir: () => ipcRenderer.invoke('fs-get-docs-dir')
     }
 })
 

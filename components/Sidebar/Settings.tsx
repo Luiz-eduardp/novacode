@@ -1,38 +1,36 @@
-
 import React, { useState, useEffect } from 'react';
 import { ThemeConfig } from '../../types';
 import { THEMES } from '../../constants';
-
 
 interface SettingsProps {
   currentTheme: string;
   onThemeChange: (theme: ThemeConfig) => void;
 }
 
+const STORAGE_KEY = 'novacode_gemini_api_key';
+
 export const Settings: React.FC<SettingsProps> = ({ currentTheme, onThemeChange }) => {
   const [hasKey, setHasKey] = useState<boolean>(false);
+  const [apiKey, setApiKey] = useState<string>('');
 
   useEffect(() => {
-    const checkKey = async () => {
-      const aistudio = (window as any).aistudio;
-      if (aistudio) {
-        try {
-          const selected = await aistudio.hasSelectedApiKey();
-          setHasKey(selected);
-        } catch (e) {
-          console.error("Erro ao verificar chave:", e);
-        }
-      }
-    };
-    checkKey();
-  }, []);
-
-  const handleSelectKey = async () => {
-    const aistudio = (window as any).aistudio;
-    if (aistudio) {
-      await aistudio.openSelectKey();
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      setApiKey(saved);
       setHasKey(true);
     }
+  }, []);
+
+  const handleSaveKey = () => {
+    if (!apiKey) return;
+    localStorage.setItem(STORAGE_KEY, apiKey);
+    setHasKey(true);
+  };
+
+  const handleRemoveKey = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    setApiKey('');
+    setHasKey(false);
   };
 
   return (
@@ -64,15 +62,29 @@ export const Settings: React.FC<SettingsProps> = ({ currentTheme, onThemeChange 
               </div>
             </div>
 
-            <button
-              onClick={handleSelectKey}
-              className="w-full py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-[10px] font-bold transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-              </svg>
-              Configurar Chave API
-            </button>
+            <div className="flex gap-2 items-center">
+              <input
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Cole sua chave API aqui"
+                className="flex-1 p-2.5 bg-black/20 rounded-xl border border-white/5 text-xs"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveKey();
+                }}
+              />
+              <button
+                onClick={handleSaveKey}
+                className="py-2.5 px-3 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-[10px] font-bold transition-all shadow-lg active:scale-95"
+              >
+                Salvar
+              </button>
+              <button
+                onClick={handleRemoveKey}
+                className="py-2.5 px-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-[10px] font-bold transition-all shadow-lg active:scale-95"
+              >
+                Remover
+              </button>
+            </div>
 
             <a
               href="https://ai.google.dev/gemini-api/docs/billing"
