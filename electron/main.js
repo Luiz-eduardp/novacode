@@ -89,6 +89,10 @@ ipcMain.handle('fs-read', async (event, { path: filePath }) => {
 
 ipcMain.handle('fs-write', async (event, { path: filePath, content }) => {
     try {
+        const dirPath = path.dirname(filePath);
+        if (!fs.existsSync(dirPath)) {
+            fs.mkdirSync(dirPath, { recursive: true });
+        }
         fs.writeFileSync(filePath, content, 'utf-8');
         return { success: true };
     } catch (error) {
@@ -99,14 +103,35 @@ ipcMain.handle('fs-write', async (event, { path: filePath, content }) => {
 
 ipcMain.handle('fs-create-file', async (event, { path: filePath }) => {
     try {
-        const dir = path.dirname(filePath);
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
+        let normalizedPath = filePath
+            .replace(/\\/g, '/')
+            .replace(/\/+/g, '/');
+
+        if (!normalizedPath.startsWith('/')) {
+            normalizedPath = path.join(os.homedir(), normalizedPath)
+                .replace(/\\/g, '/');
         }
-        fs.writeFileSync(filePath, '', 'utf-8');
+
+        console.log('Criando arquivo em:', normalizedPath);
+
+        const dirPath = path.dirname(normalizedPath);
+        console.log('Diretório pai:', dirPath);
+
+        if (!fs.existsSync(dirPath)) {
+            console.log('Diretório não existe, criando...');
+            fs.mkdirSync(dirPath, { recursive: true });
+        }
+
+        if (!fs.existsSync(normalizedPath)) {
+            fs.writeFileSync(normalizedPath, '', 'utf-8');
+            console.log('Arquivo criado com sucesso!');
+        } else {
+            console.log('Arquivo já existe');
+        }
+
         return { success: true };
     } catch (error) {
-        console.error('Erro ao criar arquivo:', error);
+        console.error('Erro ao criar arquivo:', error.message);
         return { success: false, error: error.message };
     }
 });

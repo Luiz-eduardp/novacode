@@ -63,7 +63,9 @@ export const ChronosPanel: React.FC<ChronosPanelProps> = ({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onDelete(snapshot.id);
+                  if (confirm('Deletar este snapshot do histórico?')) {
+                    onDelete(snapshot.id);
+                  }
                 }}
                 className="p-1.5 rounded opacity-0 group-hover:opacity-100 hover:bg-red-600/30 transition-all flex-shrink-0"
                 title="Deletar snapshot"

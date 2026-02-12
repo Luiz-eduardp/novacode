@@ -467,7 +467,7 @@ const App: React.FC = () => {
         })}
       </div>
 
-      <div className="flex-1 flex flex-col relative transition-colors duration-500">
+      <div className="flex-1 flex flex-col relative transition-colors duration-500 pt-16">
         {activeFile ? (
           <FileEditor
             file={activeFile}

@@ -67,48 +67,63 @@ export const ExplorerPanel: React.FC<ExplorerPanelProps> = ({
     setCreateFileModal({
       isOpen: true,
       fileName: '',
-      selectedPath: showSystemFiles ? currentPath : ''
+      selectedPath: showSystemFiles ? (currentPath || '') : ''
     });
   };
 
   const handleCreateFile = async () => {
-    const { fileName, selectedPath } = createFileModal;
+    let { fileName, selectedPath } = createFileModal;
 
     if (!fileName.trim()) {
       alert('Digite um nome para o arquivo');
       return;
     }
 
-    if (showSystemFiles && !selectedPath) {
-      alert('Selecione uma pasta');
-      return;
-    }
-
     try {
-      const filePath = selectedPath
-        ? `${selectedPath}/${fileName}`
-        : fileName;
+      let filePath = '';
 
+      if (selectedPath) {
+        filePath = `${selectedPath}/${fileName}`
+          .replace(/\\/g, '/')
+          .replace(/\/+/g, '/');
+      }
+      else if (showSystemFiles && currentPath) {
+        filePath = `${currentPath}/${fileName}`
+          .replace(/\\/g, '/')
+          .replace(/\/+/g, '/');
+      }
+      else {
+        filePath = fileName;
+      }
+
+      console.log('Tentando criar arquivo:', filePath);
       const success = await fileSystemService.createFile(filePath);
 
       if (success) {
-        if (showSystemFiles) {
+        console.log('Arquivo criado com sucesso em:', filePath);
+
+        if (showSystemFiles && (selectedPath || currentPath)) {
           await loadDirectory(selectedPath || currentPath);
         }
 
-        const content = await fileSystemService.readFile(filePath);
-        const event = new CustomEvent('openSystemFile', {
-          detail: { path: filePath, content }
-        });
-        window.dispatchEvent(event);
+        try {
+          const content = await fileSystemService.readFile(filePath);
+          const event = new CustomEvent('openSystemFile', {
+            detail: { path: filePath, content }
+          });
+          window.dispatchEvent(event);
+        } catch (readError) {
+          console.warn('Aviso ao ler arquivo criado:', readError);
+        }
 
         setCreateFileModal({ isOpen: false, fileName: '', selectedPath: '' });
+        alert('✅ Arquivo criado com sucesso!');
       } else {
-        alert('Erro ao criar arquivo');
+        alert('❌ Erro ao criar arquivo. Verifique:\n1. As permissões da pasta\n2. Se o caminho é válido\n3. Se a pasta existe');
       }
     } catch (error) {
       console.error('Erro ao criar arquivo:', error);
-      alert('Erro ao criar arquivo: ' + (error instanceof Error ? error.message : 'Desconhecido'));
+      alert('❌ Erro: ' + (error instanceof Error ? error.message : 'Desconhecido'));
     }
   };
 
@@ -125,7 +140,12 @@ export const ExplorerPanel: React.FC<ExplorerPanelProps> = ({
   };
 
   const handleNavigateToFolder = async (folderPath: string) => {
-    await loadDirectory(folderPath);
+    try {
+      const normalizedPath = folderPath.startsWith('/') ? folderPath : `/${folderPath}`;
+      await loadDirectory(normalizedPath);
+    } catch (error) {
+      console.error('Erro ao navegar para pasta:', error);
+    }
   };
 
   const handleOpenFile = async (filePath: string) => {
@@ -176,9 +196,39 @@ export const ExplorerPanel: React.FC<ExplorerPanelProps> = ({
           <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col">
             <div className="p-5 border-b border-white/5 flex-shrink-0">
               <h3 className="text-sm font-bold text-white">Criar Novo Arquivo</h3>
+              {!showSystemFiles && (
+                <p className="text-[11px] text-slate-400 mt-2">
+                  💡 Dica: Clique em 📁 para abrir uma pasta antes de criar arquivos
+                </p>
+              )}
             </div>
 
             <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              {!showSystemFiles && !currentPath ? (
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                  <p className="text-xs text-blue-300 mb-3">
+                    Você precisa abrir uma pasta primeiro!
+                  </p>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const homeDir = await fileSystemService.getHomeDirectory();
+                        if (homeDir) {
+                          setWorkspacePath(homeDir);
+                          await loadDirectory(homeDir);
+                          setShowSystemFiles(true);
+                        }
+                      } catch (error) {
+                        alert('Erro ao abrir pasta: ' + (error instanceof Error ? error.message : String(error)));
+                      }
+                    }}
+                    className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-xs text-white transition-colors font-medium"
+                  >
+                    📁 Abrir Pasta Agora
+                  </button>
+                </div>
+              ) : null}
+
               {showSystemFiles && (
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-2">
@@ -197,8 +247,8 @@ export const ExplorerPanel: React.FC<ExplorerPanelProps> = ({
                             key={folder.path}
                             onClick={() => setCreateFileModal(prev => ({ ...prev, selectedPath: folder.path }))}
                             className={`w-full text-left px-2.5 py-2 rounded-lg text-xs transition-colors ${createFileModal.selectedPath === folder.path
-                                ? 'bg-sky-600/30 border border-sky-500/50 text-sky-300'
-                                : 'bg-slate-800/30 border border-white/5 text-slate-300 hover:bg-slate-800/50'
+                              ? 'bg-sky-600/30 border border-sky-500/50 text-sky-300'
+                              : 'bg-slate-800/30 border border-white/5 text-slate-300 hover:bg-slate-800/50'
                               }`}
                           >
                             📁 {folder.name}

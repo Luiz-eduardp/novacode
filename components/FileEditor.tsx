@@ -52,6 +52,7 @@ const FileEditor: React.FC<FileEditorProps> = ({
   const editorRef = useRef<any>(null);
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [showChronos, setShowChronos] = useState(false);
+  const [showLineNumbers, setShowLineNumbers] = useState(true);
   
   const chronos = useChronos(file?.id || '');
   const snapshots = file ? chronos.getAllSnapshots(file.id) : [];
@@ -100,6 +101,9 @@ const FileEditor: React.FC<FileEditorProps> = ({
     const content = chronos.goToSnapshot(file.id, snapshotIndex);
     if (content !== null) {
       updateFileContent(file.id, content);
+      if (editorRef.current) {
+        editorRef.current.setValue(content);
+      }
       setUnsavedChanges(false);
     }
   }, [file, chronos, updateFileContent]);
@@ -153,9 +157,10 @@ const FileEditor: React.FC<FileEditorProps> = ({
 
   const language = detectLang(file.name, file.language);
 
-  function handleDeleteSnapshot(snapshotId: string): void {
-    throw new Error('Function not implemented.');
-  }
+  const handleDeleteSnapshot = useCallback((snapshotId: string) => {
+    if (!file) return;
+    chronos.deleteSnapshot(file.id, snapshotId);
+  }, [file, chronos]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
@@ -196,15 +201,30 @@ const FileEditor: React.FC<FileEditorProps> = ({
         />
       )}
 
-      <div className="flex-1 flex">
-        <div className="hidden sm:flex w-14 border-r border-white/5 text-slate-700 flex-col items-center pt-6 select-none fira-code text-[11px]">
-          {Array.from({ length: 100 }).map((_, i) => (
-            <div key={i} className="leading-7 h-7">{i + 1}</div>
-          ))}
+      <div className="flex-1 flex overflow-hidden">
+        <div 
+          className={`transition-all duration-300 ease-in-out border-r border-white/5 text-slate-700 flex flex-col items-center pt-6 select-none fira-code text-[11px] shrink-0 overflow-hidden bg-white/2 hover:bg-white/5 group relative ${
+            showLineNumbers ? 'w-14' : 'w-0'
+          }`}
+        >
+          <div className="flex-1 overflow-y-auto custom-scrollbar w-full flex flex-col items-center">
+            {Array.from({ length: 100 }).map((_, i) => (
+              <div key={i} className="leading-7 h-7 w-full text-center opacity-60 group-hover:opacity-100 transition-opacity">{i + 1}</div>
+            ))}
+          </div>
+          
+          <button
+            onClick={() => setShowLineNumbers(!showLineNumbers)}
+            title={showLineNumbers ? 'Ocultar números de linha' : 'Mostrar números de linha'}
+            className="absolute -right-3 top-2 w-6 h-6 rounded-full bg-slate-800 hover:bg-sky-600 transition-colors flex items-center justify-center text-[10px] text-slate-400 hover:text-white opacity-0 group-hover:opacity-100 border border-white/10 hover:border-sky-500/50"
+          >
+            {showLineNumbers ? '‹' : '›'}
+          </button>
         </div>
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 overflow-hidden">
           <Editor
             height="100%"
+            width="100%"
             theme={theme?.name === 'light' ? 'vs' : 'vs-dark'}
             defaultLanguage={language}
             language={language}

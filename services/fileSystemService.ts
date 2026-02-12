@@ -6,8 +6,9 @@ export interface FileSystemNode {
     modified?: number;
 }
 
-const normalizePath = (p: string): string => {
+const normalizePath = (p: string | undefined): string => {
     if (!p) return '';
+    if (typeof p !== 'string') return '';
     return p.replace(/\\/g, '/');
 };
 
@@ -22,7 +23,15 @@ export const fileSystemService = {
                 console.warn('Electron não disponível para listar diretório');
                 return [];
             }
+            if (!dirPath || typeof dirPath !== 'string') {
+                console.warn('Caminho de diretório inválido:', dirPath);
+                return [];
+            }
             const normalizedPath = normalizePath(dirPath);
+            if (!normalizedPath) {
+                console.warn('Caminho normalizado está vazio');
+                return [];
+            }
             const files = await (window as any).__electron__?.fs?.list(normalizedPath);
             return files || [];
         } catch (error) {
@@ -66,7 +75,13 @@ export const fileSystemService = {
             if (!fileSystemService.isElectronAvailable()) {
                 throw new Error('Electron não disponível para criar arquivo');
             }
+            if (!filePath || typeof filePath !== 'string') {
+                throw new Error('Caminho de arquivo inválido');
+            }
             const normalizedPath = normalizePath(filePath);
+            if (!normalizedPath) {
+                throw new Error('Caminho normalizado está vazio');
+            }
             console.log('Criando arquivo em:', normalizedPath);
             const result = await (window as any).__electron__?.fs?.createFile(normalizedPath);
             console.log('Resultado da criação:', result);
